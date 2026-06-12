@@ -102,6 +102,10 @@ fn f32_to_i16(sample: f32) -> i16 {
     (clamped * 32767.0) as i16
 }
 
+fn i16_to_f32(sample: i16) -> f32 {
+    sample as f32 / 32768.0
+}
+
 impl LinkAudioSinkBufferHandle {
     pub fn is_valid(&self) -> bool {
         unsafe { abl_link_audio_sink_buffer_is_valid(&self.buffer as *const _) }
@@ -207,6 +211,14 @@ impl<'a> LinkAudioSourceBuffer<'a> {
         LinkAudioSessionId {
             id: self.buffer.info.session_id,
         }
+    }
+
+    pub fn samples(&self) -> &[i16] {
+        unsafe { std::slice::from_raw_parts(self.buffer.samples, self.buffer.info.num_frames) }
+    }
+
+    pub fn samples_f32(&self) -> impl Iterator<Item = f32> {
+        self.samples().iter().map(|v| i16_to_f32(*v))
     }
 
     pub fn begin_beats(&self, session_state: SessionState, quantum: f64) -> Option<f64> {
