@@ -1,5 +1,13 @@
-use crate::{rust_bindings::*, session_state::SessionState, split};
-use std::os::raw::c_void;
+use crate::{
+    link_audio::{
+        LinkAudioChannelId, LinkAudioChannelList, LinkAudioSink, LinkAudioSource,
+        LinkAudioSourceBuffer,
+    },
+    rust_bindings::*,
+    session_state::SessionState,
+    split,
+};
+use std::{ffi::CString, os::raw::c_void};
 
 /// The representation of an abl_link instance.
 pub struct AblLink {
@@ -43,6 +51,72 @@ impl AblLink {
     ///  Realtime-safe: no
     pub fn enable(&self, enable: bool) {
         unsafe { abl_link_enable(self.link, enable) }
+    }
+
+    pub fn enable_link_audio(&self, enabled: bool) {
+        unsafe { abl_link_audio_enable_link_audio(self.link, enabled) };
+    }
+
+    pub fn is_link_audio_enabled(&self) -> bool {
+        unsafe { abl_link_audio_is_link_audio_enabled(self.link) }
+    }
+
+    pub fn set_peer_name(&self, name: String) {
+        if let Ok(c_string) = CString::new(name) {
+            unsafe { abl_link_audio_set_peer_name(self.link, c_string.as_ptr()) };
+        }
+    }
+
+    pub fn peer_name(&self) -> String {
+        let mut buffer = vec![0 as std::os::raw::c_char; 256];
+        let written =
+            unsafe { abl_link_audio_peer_name(self.link, buffer.as_mut_ptr(), buffer.len()) };
+        let bytes: Vec<u8> = buffer[..written].iter().map(|&c| c as u8).collect();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    pub fn get_audio_channels(&self) -> LinkAudioChannelList {
+        let list = unsafe { abl_link_audio_get_channels(self.link) };
+        LinkAudioChannelList { list }
+    }
+
+    pub fn set_audio_channels_changed_callback(&self, mut closure: impl FnMut()) {
+        unsafe {
+            let (state, callback) = split::split_closure_trailing_data(&mut closure);
+            abl_link_audio_set_channels_changed_callback(self.link, Some(callback), state);
+        }
+    }
+
+    pub fn delete_audio_channels_changed_callback(&self) {
+        extern "C" fn empty_fn(_: *mut c_void) {}
+        unsafe {
+            abl_link_audio_set_channels_changed_callback(
+                self.link,
+                Some(empty_fn),
+                std::ptr::null_mut() as *mut c_void,
+            );
+        }
+    }
+
+    pub fn create_audio_sink(&self, name: String, max_num_samples: usize) -> Option<LinkAudioSink> {
+        LinkAudioSink::new(self, name, max_num_samples)
+    }
+
+    pub fn create_audio_source(
+        &self,
+        channel_id: LinkAudioChannelId,
+        mut callback: impl FnMut(LinkAudioSourceBuffer) + Send + 'static,
+    ) -> LinkAudioSource {
+        LinkAudioSource {
+            source: unsafe {
+                let mut closure = |buffer: *const abl_link_audio_source_buffer| {
+                    let buffer: &abl_link_audio_source_buffer = &*buffer;
+                    callback(LinkAudioSourceBuffer { buffer })
+                };
+                let (state, callback) = split::split_closure_trailing_data(&mut closure);
+                abl_link_audio_source_create(self.link, channel_id.id, Some(callback), state)
+            },
+        }
     }
 
     ///  Is start/stop synchronization enabled?

@@ -17,6 +17,7 @@ mod rust_bindings {
 
 mod abl_link;
 mod host_time_filter;
+mod link_audio;
 mod session_state;
 mod split;
 

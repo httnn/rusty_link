@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
+
 # Build Link with the official C-Extension as a static library called 'lib_abl_link'
 project(link-with-c-extension)
 
@@ -9,6 +10,7 @@ include(../link/AbletonLinkConfig.cmake)
 include(../link/extensions/abl_link/abl_link.cmake)
 
 target_link_libraries(lib_abl_link abl_link)
+set_property(TARGET lib_abl_link PROPERTY CXX_STANDARD 17)
 
 # $"CMAKE_INSTALL_PREFIX}", or "." should reference the same directory as $OUT_DIR in Cargo / Rust.
 # This install command copies the compiled library to '$OUT_DIR/lib':
