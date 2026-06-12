@@ -1,7 +1,8 @@
-use std::{ffi::CString, os::raw::c_char};
+use std::{ffi::CString, marker::PhantomData, os::raw::c_char};
 
 use crate::{AblLink, SessionState, rust_bindings::*};
 
+/// A list of Link Audio channels.
 pub struct LinkAudioChannelList {
     pub(crate) list: abl_link_audio_channel_list,
 }
@@ -23,6 +24,7 @@ pub struct LinkAudioSink {
 }
 
 impl LinkAudioSink {
+    ///  Construct a Link Audio sink to announce an audio channel.
     pub fn new(link: &AblLink, name: String, max_num_samples: usize) -> Option<Self> {
         let Ok(c_string) = CString::new(name) else {
             return None;
@@ -34,6 +36,11 @@ impl LinkAudioSink {
         })
     }
 
+    /// Set the name of a Link Audio sink.
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: no
     pub fn set_name(&self, name: String) -> bool {
         let Ok(c_string) = CString::new(name) else {
             return false;
@@ -42,6 +49,7 @@ impl LinkAudioSink {
         true
     }
 
+    /// Get the name of a Link Audio sink.
     pub fn get_name(&self) -> String {
         let mut buffer = vec![0 as c_char; 256];
         let written =
@@ -50,19 +58,35 @@ impl LinkAudioSink {
         String::from_utf8_lossy(&bytes).into_owned()
     }
 
+    /// Get the current maximum number of samples a buffer handle can hold.
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: yes
     pub fn max_num_samples(&self) -> usize {
         unsafe { abl_link_audio_sink_max_num_samples(self.sink) }
     }
 
+    /// Request a maximum buffer size for future buffers.
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: yes
     pub fn request_max_num_samples(&self, max_num_samples: usize) {
         unsafe {
             abl_link_audio_sink_request_max_num_samples(self.sink, max_num_samples);
         }
     }
 
-    pub fn retain_buffer(&self) -> LinkAudioSinkBufferHandle {
+    /// Retain a buffer for writing audio samples. Only one buffer can be retained at a time.
+    ///
+    /// Thread-safe: no
+    ///
+    /// Realtime-safe: yes
+    pub fn retain_buffer<'a>(&'a self) -> LinkAudioSinkBufferHandle<'a> {
         LinkAudioSinkBufferHandle {
             buffer: unsafe { abl_link_audio_sink_retain_buffer(self.sink) },
+            _p: PhantomData,
         }
     }
 }
@@ -73,6 +97,7 @@ impl Drop for LinkAudioSink {
     }
 }
 
+///  Identifier for Link Audio channels/peers/sessions.
 pub struct LinkAudioChannelId {
     pub(crate) id: abl_link_audio_channel_id,
 }
@@ -93,8 +118,10 @@ impl PartialEq for LinkAudioSessionId {
     }
 }
 
-pub struct LinkAudioSinkBufferHandle {
+/// Handle to a buffer for writing audio samples.
+pub struct LinkAudioSinkBufferHandle<'a> {
     pub(crate) buffer: abl_link_audio_sink_buffer_handle,
+    _p: PhantomData<&'a ()>,
 }
 
 fn f32_to_i16(sample: f32) -> i16 {
@@ -106,11 +133,19 @@ fn i16_to_f32(sample: i16) -> f32 {
     sample as f32 / 32768.0
 }
 
-impl LinkAudioSinkBufferHandle {
+impl<'a> LinkAudioSinkBufferHandle<'a> {
+    /// Check if a buffer handle is valid.
+    ///
+    /// Thread-safe: no
+    ///
+    /// Realtime-safe: yes
     pub fn is_valid(&self) -> bool {
         unsafe { abl_link_audio_sink_buffer_is_valid(&self.buffer as *const _) }
     }
 
+    /// Writes a single u16 audio sample to the given index.
+    ///
+    /// Panics if the index is larger than the maximum number of samples.
     pub fn write_sample(&mut self, index: usize, sample: i16) {
         assert!(
             index < self.buffer.max_num_samples,
@@ -121,18 +156,24 @@ impl LinkAudioSinkBufferHandle {
         unsafe { *self.buffer.samples.add(index) = sample };
     }
 
+    /// Writes a single f32 audio sample to the given index.
+    ///
+    /// Panics if the index is larger than the maximum number of samples.
     pub fn write_sample_f32(&mut self, index: usize, sample: f32) {
-        assert!(
-            index < self.buffer.max_num_samples,
-            "Audio sink max length is {}, tried to write sample {}.",
-            self.buffer.max_num_samples,
-            index
-        );
-        unsafe { *self.buffer.samples.add(index) = f32_to_i16(sample) };
+        self.write_sample(index, f32_to_i16(sample));
     }
 
+    pub fn max_num_samples(&self) -> usize {
+        self.buffer.max_num_samples
+    }
+
+    /// Commit a buffer after writing samples. num_frames * num_channels must not exceed max_num_samples. The session state, quantum, and beats_at_buffer_begin must match those used for rendering.
+    ///
+    /// Thread-safe: no
+    ///
+    /// Realtime-safe: yes
     pub fn commit(
-        &mut self,
+        mut self,
         session_state: SessionState,
         beats_at_buffer_begin: f64,
         quantum: f64,
@@ -154,7 +195,7 @@ impl LinkAudioSinkBufferHandle {
     }
 }
 
-impl Drop for LinkAudioSinkBufferHandle {
+impl<'a> Drop for LinkAudioSinkBufferHandle<'a> {
     fn drop(&mut self) {
         unsafe { abl_link_audio_sink_buffer_release(&mut self.buffer as *mut _) };
     }
@@ -165,6 +206,11 @@ pub struct LinkAudioSource {
 }
 
 impl LinkAudioSource {
+    /// Get the channel ID of the corresponding source.
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: yes
     pub fn get_channel_id(&self) -> LinkAudioChannelId {
         LinkAudioChannelId {
             id: unsafe { abl_link_audio_source_id(self.source) },
@@ -221,6 +267,9 @@ impl<'a> LinkAudioSourceBuffer<'a> {
         self.samples().iter().map(|v| i16_to_f32(*v))
     }
 
+    /// Map the beat time at the begin of the buffer to the local Link session state.
+    ///
+    /// Returns true if the buffer originates from the same Link Session and out_beats is set.
     pub fn begin_beats(&self, session_state: SessionState, quantum: f64) -> Option<f64> {
         unsafe {
             let mut out_beats = 0.0f64;
@@ -237,6 +286,9 @@ impl<'a> LinkAudioSourceBuffer<'a> {
         }
     }
 
+    /// Map the beat time at the end of the buffer to the local Link session state.
+    ///
+    /// Returns true if the buffer originates from the same Link Session and out_beats is set.
     pub fn end_beats(&self, session_state: SessionState, quantum: f64) -> Option<f64> {
         unsafe {
             let mut out_beats = 0.0f64;

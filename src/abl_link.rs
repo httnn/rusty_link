@@ -53,20 +53,40 @@ impl AblLink {
         unsafe { abl_link_enable(self.link, enable) }
     }
 
+    /// Enable or disable audio.
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: no
     pub fn enable_link_audio(&self, enabled: bool) {
         unsafe { abl_link_audio_enable_link_audio(self.link, enabled) };
     }
 
+    /// Is Link Audio enabled
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: yes
     pub fn is_link_audio_enabled(&self) -> bool {
         unsafe { abl_link_audio_is_link_audio_enabled(self.link) }
     }
 
+    /// Change the local peer name for identification in the Link session.
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: no
     pub fn set_peer_name(&self, name: String) {
         if let Ok(c_string) = CString::new(name) {
             unsafe { abl_link_audio_set_peer_name(self.link, c_string.as_ptr()) };
         }
     }
 
+    /// Get the local peer name for identification in the Link session.
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: no
     pub fn peer_name(&self) -> String {
         let mut buffer = vec![0 as std::os::raw::c_char; 256];
         let written =
@@ -75,11 +95,23 @@ impl AblLink {
         String::from_utf8_lossy(&bytes).into_owned()
     }
 
+    /// Get the list of available Link Audio channels
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: no
     pub fn get_audio_channels(&self) -> LinkAudioChannelList {
         let list = unsafe { abl_link_audio_get_channels(self.link) };
         LinkAudioChannelList { list }
     }
 
+    /// Register a callback to be notified when the set of available audio channels changes. This will be called when channels are discovered or disappear and when names change.
+    ///
+    /// Thread-safe: yes
+    ///
+    /// Realtime-safe: no
+    ///
+    /// The callback is invoked on a Link-managed thread.
     pub fn set_audio_channels_changed_callback(&self, mut closure: impl FnMut()) {
         unsafe {
             let (state, callback) = split::split_closure_trailing_data(&mut closure);
@@ -87,6 +119,11 @@ impl AblLink {
         }
     }
 
+    ///  Delete the callback which notifies about audio channel changes.
+    ///
+    ///  Thread-safe: yes
+    ///
+    ///  Realtime-safe: no
     pub fn delete_audio_channels_changed_callback(&self) {
         extern "C" fn empty_fn(_: *mut c_void) {}
         unsafe {
@@ -98,10 +135,14 @@ impl AblLink {
         }
     }
 
+    /// Construct a Link Audio sink to announce an audio channel.
     pub fn create_audio_sink(&self, name: String, max_num_samples: usize) -> Option<LinkAudioSink> {
         LinkAudioSink::new(self, name, max_num_samples)
     }
 
+    ///  Construct a Link Audio source for a given channel.
+    ///
+    /// `callback` is invoked on a Link-managed thread when a source buffer is received.
     pub fn create_audio_source(
         &self,
         channel_id: LinkAudioChannelId,
