@@ -1,6 +1,78 @@
-use std::{ffi::CString, marker::PhantomData, os::raw::c_char};
+use std::{
+    ffi::{CStr, CString},
+    marker::PhantomData,
+    os::raw::c_char,
+};
 
 use crate::{AblLink, SessionState, rust_bindings::*};
+
+pub struct LinkAudioPeerId {
+    pub(crate) id: abl_link_audio_peer_id,
+}
+
+impl PartialEq for LinkAudioPeerId {
+    fn eq(&self, other: &Self) -> bool {
+        self.id.bytes == other.id.bytes
+    }
+}
+
+///  Identifier for Link Audio channels/peers/sessions.
+pub struct LinkAudioChannelId {
+    pub(crate) id: abl_link_audio_channel_id,
+}
+
+impl PartialEq for LinkAudioChannelId {
+    fn eq(&self, other: &Self) -> bool {
+        self.id.bytes == other.id.bytes
+    }
+}
+
+pub struct LinkAudioSessionId {
+    pub(crate) id: abl_link_audio_session_id,
+}
+
+impl PartialEq for LinkAudioSessionId {
+    fn eq(&self, other: &Self) -> bool {
+        self.id.bytes == other.id.bytes
+    }
+}
+
+///  A Link Audio channel description.
+///
+/// The id and peer_id are persistent for the lifetime of a channel. The name and peer_name may change over time and are meant for display purposes.
+pub struct LinkAudioChannel<'a> {
+    pub(crate) channel: &'a abl_link_audio_channel,
+}
+
+impl<'a> LinkAudioChannel<'a> {
+    pub fn id(&self) -> LinkAudioChannelId {
+        LinkAudioChannelId {
+            id: self.channel.id,
+        }
+    }
+
+    pub fn name(&self) -> String {
+        unsafe {
+            CStr::from_ptr(self.channel.name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
+
+    pub fn peer_id(&self) -> LinkAudioPeerId {
+        LinkAudioPeerId {
+            id: self.channel.peer_id,
+        }
+    }
+
+    pub fn peer_name(&self) -> String {
+        unsafe {
+            CStr::from_ptr(self.channel.peer_name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
+}
 
 /// A list of Link Audio channels.
 pub struct LinkAudioChannelList {
@@ -8,6 +80,19 @@ pub struct LinkAudioChannelList {
 }
 
 impl LinkAudioChannelList {
+    pub fn get<'a>(&'a self, index: usize) -> LinkAudioChannel<'a> {
+        LinkAudioChannel {
+            channel: unsafe { &*self.list.channels.add(index) as &abl_link_audio_channel },
+        }
+    }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = LinkAudioChannel<'a>> {
+        let slice = unsafe { core::slice::from_raw_parts(self.list.channels, self.list.count) };
+        slice
+            .into_iter()
+            .map(|channel| LinkAudioChannel { channel })
+    }
+
     pub fn len(&self) -> usize {
         self.list.count
     }
@@ -94,27 +179,6 @@ impl LinkAudioSink {
 impl Drop for LinkAudioSink {
     fn drop(&mut self) {
         unsafe { abl_link_audio_sink_destroy(self.sink) };
-    }
-}
-
-///  Identifier for Link Audio channels/peers/sessions.
-pub struct LinkAudioChannelId {
-    pub(crate) id: abl_link_audio_channel_id,
-}
-
-impl PartialEq for LinkAudioChannelId {
-    fn eq(&self, other: &Self) -> bool {
-        self.id.bytes == other.id.bytes
-    }
-}
-
-pub struct LinkAudioSessionId {
-    pub(crate) id: abl_link_audio_session_id,
-}
-
-impl PartialEq for LinkAudioSessionId {
-    fn eq(&self, other: &Self) -> bool {
-        self.id.bytes == other.id.bytes
     }
 }
 
