@@ -1,6 +1,5 @@
 use std::{
     ffi::{CStr, CString},
-    marker::PhantomData,
     os::raw::c_char,
 };
 
@@ -168,10 +167,9 @@ impl LinkAudioSink {
     /// Thread-safe: no
     ///
     /// Realtime-safe: yes
-    pub fn retain_buffer<'a>(&'a self) -> LinkAudioSinkBufferHandle<'a> {
+    pub fn retain_buffer(&self) -> LinkAudioSinkBufferHandle {
         LinkAudioSinkBufferHandle {
             buffer: unsafe { abl_link_audio_sink_retain_buffer(self.sink) },
-            _p: PhantomData,
         }
     }
 }
@@ -183,9 +181,8 @@ impl Drop for LinkAudioSink {
 }
 
 /// Handle to a buffer for writing audio samples.
-pub struct LinkAudioSinkBufferHandle<'a> {
+pub struct LinkAudioSinkBufferHandle {
     pub(crate) buffer: abl_link_audio_sink_buffer_handle,
-    _p: PhantomData<&'a ()>,
 }
 
 fn f32_to_i16(sample: f32) -> i16 {
@@ -197,7 +194,7 @@ fn i16_to_f32(sample: i16) -> f32 {
     sample as f32 / 32768.0
 }
 
-impl<'a> LinkAudioSinkBufferHandle<'a> {
+impl LinkAudioSinkBufferHandle {
     /// Check if a buffer handle is valid.
     ///
     /// Thread-safe: no
@@ -211,13 +208,9 @@ impl<'a> LinkAudioSinkBufferHandle<'a> {
     ///
     /// Panics if the index is larger than the maximum number of samples.
     pub fn write_sample(&mut self, index: usize, sample: i16) {
-        assert!(
-            index < self.buffer.max_num_samples,
-            "Audio sink max length is {}, tried to write sample {}.",
-            self.buffer.max_num_samples,
-            index
-        );
-        unsafe { *self.buffer.samples.add(index) = sample };
+        if index < self.buffer.max_num_samples {
+            unsafe { *self.buffer.samples.add(index) = sample };
+        }
     }
 
     /// Writes a single f32 audio sample to the given index.
@@ -238,7 +231,7 @@ impl<'a> LinkAudioSinkBufferHandle<'a> {
     /// Realtime-safe: yes
     pub fn commit(
         mut self,
-        session_state: SessionState,
+        session_state: &SessionState,
         beats_at_buffer_begin: f64,
         quantum: f64,
         num_frames: usize,
@@ -259,7 +252,7 @@ impl<'a> LinkAudioSinkBufferHandle<'a> {
     }
 }
 
-impl<'a> Drop for LinkAudioSinkBufferHandle<'a> {
+impl Drop for LinkAudioSinkBufferHandle {
     fn drop(&mut self) {
         unsafe { abl_link_audio_sink_buffer_release(&mut self.buffer as *mut _) };
     }
