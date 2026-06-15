@@ -24,4 +24,5 @@ mod split;
 // PUBLIC API
 pub use abl_link::AblLink;
 pub use host_time_filter::HostTimeFilter;
+pub use link_audio::*;
 pub use session_state::SessionState;
