@@ -5,6 +5,7 @@ use std::{
 
 use crate::{AblLink, SessionState, rust_bindings::*};
 
+#[derive(Clone, Copy)]
 pub struct LinkAudioPeerId {
     pub(crate) id: abl_link_audio_peer_id,
 }
@@ -16,6 +17,7 @@ impl PartialEq for LinkAudioPeerId {
 }
 
 ///  Identifier for Link Audio channels/peers/sessions.
+#[derive(Clone, Copy)]
 pub struct LinkAudioChannelId {
     pub(crate) id: abl_link_audio_channel_id,
 }
@@ -26,6 +28,7 @@ impl PartialEq for LinkAudioChannelId {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct LinkAudioSessionId {
     pub(crate) id: abl_link_audio_session_id,
 }
@@ -36,7 +39,7 @@ impl PartialEq for LinkAudioSessionId {
     }
 }
 
-///  A Link Audio channel description.
+/// A Link Audio channel description.
 ///
 /// The id and peer_id are persistent for the lifetime of a channel. The name and peer_name may change over time and are meant for display purposes.
 pub struct LinkAudioChannel<'a> {
@@ -108,7 +111,7 @@ pub struct LinkAudioSink {
 }
 
 impl LinkAudioSink {
-    ///  Construct a Link Audio sink to announce an audio channel.
+    /// Construct a Link Audio sink to announce an audio channel.
     pub fn new(link: &AblLink, name: String, max_num_samples: usize) -> Option<Self> {
         let Ok(c_string) = CString::new(name) else {
             return None;
@@ -327,7 +330,7 @@ impl<'a> LinkAudioSourceBuffer<'a> {
     /// Map the beat time at the begin of the buffer to the local Link session state.
     ///
     /// Returns true if the buffer originates from the same Link Session and out_beats is set.
-    pub fn begin_beats(&self, session_state: SessionState, quantum: f64) -> Option<f64> {
+    pub fn begin_beats(&self, session_state: &SessionState, quantum: f64) -> Option<f64> {
         unsafe {
             let mut out_beats = 0.0f64;
             if abl_link_audio_source_buffer_info_begin_beats(
@@ -346,7 +349,7 @@ impl<'a> LinkAudioSourceBuffer<'a> {
     /// Map the beat time at the end of the buffer to the local Link session state.
     ///
     /// Returns true if the buffer originates from the same Link Session and out_beats is set.
-    pub fn end_beats(&self, session_state: SessionState, quantum: f64) -> Option<f64> {
+    pub fn end_beats(&self, session_state: &SessionState, quantum: f64) -> Option<f64> {
         unsafe {
             let mut out_beats = 0.0f64;
             if abl_link_audio_source_buffer_info_end_beats(

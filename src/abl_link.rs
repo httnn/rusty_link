@@ -140,7 +140,7 @@ impl AblLink {
         LinkAudioSink::new(self, name, max_num_samples)
     }
 
-    ///  Construct a Link Audio source for a given channel.
+    /// Construct a Link Audio source for a given channel.
     ///
     /// `callback` is invoked on a Link-managed thread when a source buffer is received.
     pub fn create_audio_source(
